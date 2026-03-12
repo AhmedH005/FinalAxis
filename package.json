@@ -1,0 +1,16 @@
+{
+  "name": "finalaxis-mobile-backup",
+  "private": true,
+  "packageManager": "pnpm@9.6.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm --filter @axis/mobile run expo",
+    "dev:clean": "pnpm --filter @axis/mobile run start:clean",
+    "ios": "pnpm --filter @axis/mobile run ios",
+    "android": "pnpm --filter @axis/mobile run android",
+    "typecheck": "pnpm --filter @axis/theme run typecheck && pnpm --filter @axis/mobile run typecheck"
+  }
+}
