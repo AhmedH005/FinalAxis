@@ -9,7 +9,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json } | 
 export type UnitSystem = 'metric' | 'imperial';
 export type BiologicalSex = 'male' | 'female' | 'other';
 export type GoalType = 'lose' | 'maintain' | 'gain' | 'perform';
-export type MetricSource = 'manual' | 'healthkit' | 'health_connect' | 'onboarding';
+export type MetricSource = 'manual' | 'healthkit' | 'health_connect' | 'onboarding' | 'phone_estimate';
 
 export interface Profile {
   id: string;
@@ -85,6 +85,8 @@ export interface SleepLog {
   quality_rating: number | null;
   notes: string | null;
   source: MetricSource;
+  sleep_kind?: 'tracked_sleep' | 'time_in_bed' | null;
+  source_label?: string | null;
   created_at: string;
 }
 

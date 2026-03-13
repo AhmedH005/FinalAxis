@@ -1,4 +1,4 @@
-import { USDA_API_BASE, USDA_API_KEY, EDAMAM_APP_ID, EDAMAM_APP_KEY } from '@/constants';
+import { USDA_API_BASE, USDA_API_KEY, EDAMAM_APP_ID, EDAMAM_APP_KEY } from './food-config';
 
 export type FoodProviderId = 'local' | 'open_food_facts' | 'usda' | 'edamam';
 

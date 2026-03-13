@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { todayStr } from './utils';
 
 export interface RecoveryCheckIn {
   date: string;
@@ -12,10 +13,6 @@ const STORAGE_KEY = 'axis.body.recovery.v1';
 const MAX_ENTRIES = 30;
 
 let memory: RecoveryCheckIn[] | null = null;
-
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 async function loadEntries() {
   if (memory) return memory;
@@ -47,13 +44,13 @@ export async function getRecoveryCheckIns() {
 
 export async function getTodayRecoveryCheckIn() {
   const entries = await loadEntries();
-  const key = todayKey();
+  const key = todayStr();
   return entries.find((entry) => entry.date === key) ?? null;
 }
 
 export async function saveRecoveryCheckIn(input: Omit<RecoveryCheckIn, 'date'> & { date?: string }) {
   const entries = await loadEntries();
-  const date = input.date ?? todayKey();
+  const date = input.date ?? todayStr();
   const nextEntry: RecoveryCheckIn = {
     date,
     steps: input.steps ?? null,
@@ -66,24 +63,4 @@ export async function saveRecoveryCheckIn(input: Omit<RecoveryCheckIn, 'date'> &
     .sort((a, b) => b.date.localeCompare(a.date));
 
   return persistEntries(nextEntries);
-}
-
-export function computeRecoveryScore(input: {
-  sleepMinutes: number | null;
-  energy: number | null;
-  fatigue: number | null;
-  soreness: number | null;
-  sleepTargetMinutes?: number;
-}) {
-  const sleepTarget = input.sleepTargetMinutes ?? 480;
-  const parts: number[] = [];
-
-  if (input.sleepMinutes) parts.push(Math.min(1, input.sleepMinutes / sleepTarget));
-  if (input.energy) parts.push(input.energy / 5);
-  if (input.fatigue) parts.push(1 - (input.fatigue - 1) / 4);
-  if (input.soreness) parts.push(1 - (input.soreness - 1) / 4);
-
-  if (parts.length === 0) return null;
-
-  return Math.round((parts.reduce((sum, part) => sum + part, 0) / parts.length) * 100);
 }

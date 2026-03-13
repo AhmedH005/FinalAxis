@@ -1,5 +1,5 @@
 {
-  "name": "finalaxis-mobile-backup",
+  "name": "axis-workspace",
   "private": true,
   "packageManager": "pnpm@9.6.0",
   "workspaces": [
@@ -11,6 +11,8 @@
     "dev:clean": "pnpm --filter @axis/mobile run start:clean",
     "ios": "pnpm --filter @axis/mobile run ios",
     "android": "pnpm --filter @axis/mobile run android",
-    "typecheck": "pnpm --filter @axis/theme run typecheck && pnpm --filter @axis/mobile run typecheck"
+    "lint": "pnpm --filter @axis/mobile run lint",
+    "typecheck": "pnpm --filter @axis/theme run typecheck && pnpm --filter @axis/mobile run typecheck",
+    "test:engines": "pnpm --filter @axis/mobile run test:engines"
   }
 }

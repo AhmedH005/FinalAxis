@@ -14,6 +14,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { endOfWeek, format, isAfter, isToday, parseISO, startOfWeek } from 'date-fns';
 import { color, space, radius, typography } from '@axis/theme';
 import { useAuth } from '@/providers/AuthProvider';
+import { timeBlockRoute } from '@/types/navigation';
 import {
   TIME_COLOR,
   formatBlockDate,
@@ -70,7 +71,7 @@ function BlockCard({
         tone === 'current' && { borderColor: accent + '55' },
         tone === 'next' && { borderColor: TIME_COLOR + '40' },
       ]}
-      onPress={() => router.push(`/(app)/time/${block.id}` as any)}
+      onPress={() => router.push(timeBlockRoute(block.id))}
     >
       <View style={[styles.blockAccent, { backgroundColor: accent }]} />
 
@@ -244,13 +245,19 @@ function WeekPane({ blocks }: { blocks: TimeBlock[] }) {
 }
 
 export default function TimeCompanionScreen() {
-  const { session } = useAuth();
+  const { session, timeSession, timeLoading, timeAuthError, hasDedicatedTimeSupabase } = useAuth();
   const [mode, setMode] = useState<TimeViewMode>('today');
 
-  const userId = session?.user.id ?? null;
-  const { data: blocks = [], isLoading, isRefetching, refetch, error } = useTimeCompanionWindow(userId);
+  const sourceUsers = useMemo(
+    () => ({
+      primaryUserId: session?.user.id ?? null,
+      timeUserId: timeSession?.user.id ?? null,
+    }),
+    [session?.user.id, timeSession?.user.id],
+  );
+  const { data: blocks = [], isLoading, isRefetching, refetch, error } = useTimeCompanionWindow(sourceUsers);
 
-  const now = new Date();
+  const now = useMemo(() => new Date(), []);
   const todayBlocks = useMemo(
     () => blocks.filter((block) => isToday(parseISO(block.start))),
     [blocks],
@@ -299,15 +306,23 @@ export default function TimeCompanionScreen() {
           ))}
         </View>
 
-        {isLoading ? (
+        {timeLoading || isLoading ? (
           <View style={styles.loaderWrap}>
             <ActivityIndicator color={TIME_COLOR} />
             <Text style={styles.loaderText}>Loading your schedule...</Text>
           </View>
+        ) : hasDedicatedTimeSupabase && !timeSession && blocks.length === 0 ? (
+          <EmptyState
+            title="Time Engine needs its own sign-in"
+            detail={
+              timeAuthError ??
+              'Log out and sign back in with the same email and password you use on the web calendar so mobile can open the shared Time backend.'
+            }
+          />
         ) : error ? (
           <EmptyState
             title="Could not reach Time Engine"
-            detail="Check EXPO_PUBLIC_TIME_API_URL and make sure the Time API is running."
+            detail="Check the dedicated Time Supabase configuration and make sure the web calendar backend is reachable."
           />
         ) : mode === 'today' ? (
           <TodayPane blocks={todayBlocks} />

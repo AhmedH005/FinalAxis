@@ -1,0 +1,30 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "node16",
+    "moduleResolution": "node16",
+    "target": "es2020",
+    "noEmit": false,
+    "outDir": "./.test-dist",
+    "rootDir": ".",
+    "sourceMap": false,
+    "baseUrl": "."
+  },
+  "include": [
+    "src/engines/body/recovery-score.ts",
+    "src/engines/body/summary.ts",
+    "src/engines/body/types.ts",
+    "src/engines/life-os/context.ts",
+    "src/engines/life-os/observations.ts",
+    "src/engines/life-os/types.ts",
+    "src/engines/mind/patterns.ts",
+    "src/engines/mind/types.ts",
+    "src/engines/mind/utils.ts",
+    "src/engines/time/summary.ts",
+    "src/engines/time/types.ts",
+    "src/lib/supabase/database.types.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

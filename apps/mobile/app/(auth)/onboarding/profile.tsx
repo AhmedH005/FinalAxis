@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { color, space, radius, typography } from '@axis/theme';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/providers/AuthProvider';
+import { authRoutes } from '@/types/navigation';
 
 type Sex = 'male' | 'female' | 'other';
 
@@ -51,7 +52,7 @@ export default function OnboardingProfile() {
       return;
     }
 
-    router.push('/(auth)/onboarding/body');
+    router.push(authRoutes.onboardingBody);
   }
 
   return (

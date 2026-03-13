@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   View,
   Text,
@@ -10,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { color, space, radius, typography } from '@axis/theme';
 import {
@@ -19,9 +20,14 @@ import {
   useAddSleepLog,
   useDeleteSleepLog,
   formatDuration,
+  formatSleepClock,
   formatSleepEnd,
   progressPct,
+  getHealthAdapterStatuses,
+  requestHealthAdapterAccess,
+  type AxisSleepRecord,
 } from '@/engines/body';
+import type { HealthAdapterStatus } from '@/engines/body';
 
 const HOUR_PRESETS = [6, 7, 8, 9];
 const QUALITY_EMOJI = ['', '😴', '😐', '🙂', '😊', '🌟'];
@@ -30,6 +36,35 @@ function sleepPctColor(pct: number): string {
   if (pct >= 100) return '#43D9A3';
   if (pct >= 80) return '#F9B24E';
   return '#FF6B6B';
+}
+
+function isAutomaticSleepLog(log: AxisSleepRecord | null | undefined) {
+  return log?.source === 'healthkit';
+}
+
+function getSleepSourceLabel(log: AxisSleepRecord | null | undefined) {
+  if (!log) return 'last night';
+  if (log.source === 'healthkit') return log.source_label ?? 'Apple Health';
+  return 'Manual log';
+}
+
+function getSleepBadgeLabel(log: AxisSleepRecord) {
+  if (log.source === 'healthkit') return 'HealthKit';
+  return null;
+}
+
+function getSleepScoreLabel(log: AxisSleepRecord | null | undefined) {
+  const score = log?.sleep_score?.value;
+  return typeof score === 'number' ? String(score) : '—';
+}
+
+function getSleepScoreSummary(log: AxisSleepRecord | null | undefined) {
+  return log?.sleep_score?.summary ?? 'AXIS will score sleep once enough data is available.';
+}
+
+function getTimeInBedLabel(log: AxisSleepRecord | null | undefined) {
+  const minutes = log?.time_in_bed_minutes;
+  return typeof minutes === 'number' ? formatDuration(minutes) : '—';
 }
 
 function QualityDots({ value }: { value: number | null }) {
@@ -69,10 +104,14 @@ function QualityPicker({ value, onChange }: { value: number | null; onChange: (v
 
 export default function SleepScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const autoConnectAttempted = useRef(false);
   const [showForm, setShowForm] = useState(false);
   const [hoursStr, setHoursStr] = useState('');
   const [quality, setQuality] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [healthStatus, setHealthStatus] = useState<HealthAdapterStatus | null>(null);
 
   const { data: goals } = useGoals();
   const { data: logs = [], isLoading } = useRecentSleepLogs(14);
@@ -153,8 +192,68 @@ export default function SleepScreen() {
     ]);
   }
 
+  function handleDeleteLog(log: (typeof logs)[number]) {
+    if (isAutomaticSleepLog(log)) {
+      Alert.alert(
+        'Automatic sleep entry',
+        'This sleep entry is coming from Apple Health. Remove or edit it in Apple Health, or disconnect Apple Health from AXIS.',
+      );
+      return;
+    }
+
+    handleDelete(log.id);
+  }
+
   const latestPct = latestLog?.duration_minutes ? progressPct(latestLog.duration_minutes, sleepTarget) : 0;
   const pillColor = latestLog ? sleepPctColor(latestPct) : color.text.muted;
+  const isAutoSleep = healthStatus?.connected === true;
+  const isAutomaticUnavailable = healthStatus?.available === false;
+
+  const refreshHealthStatus = useCallback(() => {
+    let active = true;
+
+    getHealthAdapterStatuses().then((statuses) => {
+      if (!active) return;
+      setHealthStatus(statuses.find((entry) => entry.id === 'healthkit') ?? null);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => refreshHealthStatus(), [refreshHealthStatus]);
+
+  useFocusEffect(useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['body', 'sleep'] });
+    queryClient.invalidateQueries({ queryKey: ['body', 'recovery'] });
+    return refreshHealthStatus();
+  }, [queryClient, refreshHealthStatus]));
+
+  const handleConnectHealth = useCallback(async () => {
+    setConnecting(true);
+    try {
+      const status = await requestHealthAdapterAccess('healthkit');
+      setHealthStatus(status);
+      queryClient.invalidateQueries({ queryKey: ['body', 'sleep'] });
+      queryClient.invalidateQueries({ queryKey: ['body', 'recovery'] });
+      setFeedback(
+        status.connected
+          ? 'Apple Health connected. Sleep will now import automatically on supported iPhones.'
+          : status.status,
+      );
+    } finally {
+      setConnecting(false);
+    }
+  }, [queryClient]);
+
+  useEffect(() => {
+    if (!healthStatus?.available || healthStatus.connected || healthStatus.status !== 'Ready to connect') return;
+    if (autoConnectAttempted.current) return;
+
+    autoConnectAttempted.current = true;
+    handleConnectHealth();
+  }, [healthStatus?.available, healthStatus?.connected, healthStatus?.status, handleConnectHealth]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -173,14 +272,20 @@ export default function SleepScreen() {
                 <MaterialCommunityIcons name={'moon-waning-crescent' as any} size={22} color="#A855F7" />
                 <Text style={styles.title}>Sleep</Text>
               </View>
-              <Text style={styles.subtitle}>Quick presets first. Full edit only when you need it.</Text>
+              <Text style={styles.subtitle}>
+                {isAutomaticUnavailable
+                  ? 'Automatic iPhone sleep cannot be tested in the simulator. Use a real iPhone to see HealthKit sleep imports.'
+                  : isAutoSleep
+                  ? 'Apple Health is the primary source of sleep truth in AXIS. Manual entry is only a fallback.'
+                  : 'Connect Apple Health first. Use manual logging only when automatic sleep data is missing.'}
+              </Text>
             </View>
             <Pressable
               style={[styles.logBtn, showForm && styles.logBtnActive]}
               onPress={() => setShowForm((value) => !value)}
             >
               <Text style={[styles.logBtnText, showForm && styles.logBtnTextActive]}>
-                {showForm ? 'Close' : 'Custom'}
+                {showForm ? 'Close' : isAutoSleep ? 'Manual' : 'Custom'}
               </Text>
             </Pressable>
           </View>
@@ -192,11 +297,19 @@ export default function SleepScreen() {
               <Text style={styles.heroValue}>
                 {latestLog?.duration_minutes ? formatDuration(latestLog.duration_minutes) : 'No entry'}
               </Text>
-              <Text style={styles.heroTarget}>last night · target {formatDuration(sleepTarget)}</Text>
+              <Text style={styles.heroTarget}>
+                {getSleepSourceLabel(latestLog)} · target {formatDuration(sleepTarget)}
+              </Text>
+              {latestLog?.sleep_score ? (
+                <Text style={styles.scoreSummary}>{getSleepScoreSummary(latestLog)}</Text>
+              ) : null}
             </View>
             <View style={[styles.heroPill, { borderColor: pillColor, backgroundColor: pillColor + '22' }]}>
               <Text style={[styles.heroPillText, { color: pillColor }]}>
-                {latestLog?.duration_minutes ? `${latestPct}%` : 'New'}
+                {latestLog?.sleep_score?.value ? `${getSleepScoreLabel(latestLog)}` : latestLog?.duration_minutes ? `${latestPct}%` : 'New'}
+              </Text>
+              <Text style={[styles.heroPillSubtext, { color: pillColor }]}>
+                {latestLog?.sleep_score?.value ? 'Sleep score' : 'Target'}
               </Text>
             </View>
           </View>
@@ -205,6 +318,20 @@ export default function SleepScreen() {
               <View style={[styles.heroFill, { width: `${Math.min(100, latestPct)}%` as any, backgroundColor: pillColor }]} />
             </View>
           ) : null}
+          <View style={styles.heroStats}>
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatLabel}>Bedtime</Text>
+              <Text style={styles.heroStatValue}>{latestLog ? formatSleepClock(latestLog.sleep_start) : '—'}</Text>
+            </View>
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatLabel}>Wake</Text>
+              <Text style={styles.heroStatValue}>{latestLog ? formatSleepClock(latestLog.sleep_end) : '—'}</Text>
+            </View>
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatLabel}>Time in bed</Text>
+              <Text style={styles.heroStatValue}>{getTimeInBedLabel(latestLog)}</Text>
+            </View>
+          </View>
           <View style={styles.heroStats}>
             <View style={styles.heroStat}>
               <Text style={styles.heroStatLabel}>7-day average</Text>
@@ -216,8 +343,36 @@ export default function SleepScreen() {
                 {avgQuality ? `${QUALITY_EMOJI[Math.round(Number(avgQuality))]} ${avgQuality}/5` : '—'}
               </Text>
             </View>
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatLabel}>Confidence</Text>
+              <Text style={styles.heroStatValue}>{latestLog?.sleep_score?.confidence ?? '—'}</Text>
+            </View>
           </View>
         </View>
+
+        {healthStatus ? (
+          <View style={styles.healthCard}>
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={styles.healthTitle}>Apple Health</Text>
+              <Text style={styles.healthHint}>
+                {healthStatus.connected
+                  ? 'AXIS imports bedtime, wake time, duration, time in bed, and stages from Apple Health when available, then computes its own sleep score.'
+                  : isAutomaticUnavailable
+                    ? 'Automatic iPhone sleep is unavailable in the simulator. On a real iPhone, AXIS will use Apple Health as the primary source and manual logs as fallback.'
+                    : healthStatus.status}
+              </Text>
+            </View>
+            {healthStatus.available && !healthStatus.connected ? (
+              <Pressable
+                style={[styles.healthBtn, connecting && styles.disabled]}
+                onPress={handleConnectHealth}
+                disabled={connecting}
+              >
+                <Text style={styles.healthBtnText}>{connecting ? 'Connecting...' : 'Connect'}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
 
         {feedback ? (
           <View style={styles.feedbackCard}>
@@ -228,38 +383,55 @@ export default function SleepScreen() {
           </View>
         ) : null}
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionLabel}>Quick log</Text>
-            {latestLog ? (
-              <Pressable onPress={loadLastNight}>
-                <Text style={styles.sectionAction}>Use last entry</Text>
-              </Pressable>
-            ) : null}
-          </View>
-          <View style={styles.quickGrid}>
-            {quickPresets.map((hours) => {
-              const mins = Math.round(hours * 60);
-              const pct = progressPct(mins, sleepTarget);
-              const c = sleepPctColor(pct);
-              return (
-                <Pressable
-                  key={hours}
-                  style={[styles.quickCard, addLog.isPending && styles.disabled, { borderColor: c + '44' }]}
-                  onPress={() => repeatLog(mins, latestLog?.quality_rating ?? null)}
-                  disabled={addLog.isPending}
-                >
-                  <Text style={[styles.quickValue, { color: c }]}>{hours}h</Text>
-                  <Text style={styles.quickMeta}>
-                    {latestLog?.duration_minutes && Math.abs(hours * 60 - latestLog.duration_minutes) < 1
-                      ? 'Repeat last'
-                      : `${pct}% of target`}
-                  </Text>
+        {!isAutoSleep ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>Quick log</Text>
+              {latestLog ? (
+                <Pressable onPress={loadLastNight}>
+                  <Text style={styles.sectionAction}>Use last entry</Text>
                 </Pressable>
-              );
-            })}
+              ) : null}
+            </View>
+            {isAutomaticUnavailable ? (
+              <Text style={styles.sectionHint}>
+                Simulator only: this quick log is showing because automatic phone sleep cannot run here.
+              </Text>
+            ) : null}
+            <View style={styles.quickGrid}>
+              {quickPresets.map((hours) => {
+                const mins = Math.round(hours * 60);
+                const pct = progressPct(mins, sleepTarget);
+                const c = sleepPctColor(pct);
+                return (
+                  <Pressable
+                    key={hours}
+                    style={[styles.quickCard, addLog.isPending && styles.disabled, { borderColor: c + '44' }]}
+                    onPress={() => repeatLog(mins, latestLog?.quality_rating ?? null)}
+                    disabled={addLog.isPending}
+                  >
+                    <Text style={[styles.quickValue, { color: c }]}>{hours}h</Text>
+                    <Text style={styles.quickMeta}>
+                      {latestLog?.duration_minutes && Math.abs(hours * 60 - latestLog.duration_minutes) < 1
+                        ? 'Repeat last'
+                        : `${pct}% of target`}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-        </View>
+        ) : !showForm ? (
+          <View style={styles.manualCard}>
+            <Text style={styles.manualTitle}>Manual fallback</Text>
+            <Text style={styles.manualText}>
+              Apple Health remains the source of truth. Add a manual entry only when automatic sleep data is missing or incomplete.
+            </Text>
+            <Pressable style={styles.manualBtn} onPress={() => setShowForm(true)}>
+              <Text style={styles.manualBtnText}>Add manual entry</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {showForm ? (
           <View style={styles.formCard}>
@@ -313,13 +485,25 @@ export default function SleepScreen() {
                     <View style={styles.logLeft}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                         <Text style={styles.logDate}>{formatSleepEnd(log.sleep_end)}</Text>
-                        {log.quality_rating ? <QualityDots value={log.quality_rating} /> : null}
+                        <View style={styles.logHeaderRight}>
+                          {getSleepBadgeLabel(log) ? (
+                            <View style={styles.autoBadge}>
+                              <Text style={styles.autoBadgeText}>{getSleepBadgeLabel(log)}</Text>
+                            </View>
+                          ) : null}
+                          {log.quality_rating ? <QualityDots value={log.quality_rating} /> : null}
+                        </View>
                       </View>
                       <Text style={styles.logDuration}>{formatDuration(duration)}</Text>
                       <View style={styles.logProgress}>
                         <View style={[styles.logProgressFill, { width: `${Math.min(100, pct)}%` as any, backgroundColor: rowColor }]} />
                       </View>
                       <Text style={[styles.logMeta, { color: rowColor }]}>{pct}% of target</Text>
+                      {log.sleep_score ? (
+                        <Text style={styles.estimateHint}>
+                          Score {log.sleep_score.value ?? '—'} · {log.sleep_score.confidence} confidence
+                        </Text>
+                      ) : null}
                     </View>
                     <View style={styles.logActions}>
                       <Pressable
@@ -328,7 +512,7 @@ export default function SleepScreen() {
                       >
                         <Text style={styles.inlineActionText}>Repeat</Text>
                       </Pressable>
-                      <Pressable onPress={() => handleDelete(log.id)} style={styles.deleteBtn}>
+                      <Pressable onPress={() => handleDeleteLog(log)} style={styles.deleteBtn}>
                         <MaterialCommunityIcons name={'close' as any} size={16} color={color.text.muted} />
                       </Pressable>
                     </View>
@@ -375,19 +559,63 @@ const styles = StyleSheet.create({
   heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   heroValue: { fontSize: typography['4xl'], fontWeight: '800', color: color.text.primary, letterSpacing: -1 },
   heroTarget: { fontSize: typography.base, color: color.text.muted },
+  scoreSummary: { fontSize: typography.sm, color: color.text.muted, lineHeight: 20, marginTop: 6, maxWidth: 260 },
   heroPill: {
     borderRadius: radius.pill,
     borderWidth: 1,
     paddingHorizontal: space.md,
     paddingVertical: space.xs,
+    alignItems: 'center',
   },
   heroPillText: { fontSize: typography.sm, fontWeight: '700' },
+  heroPillSubtext: { fontSize: typography.xs, fontWeight: '600', marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
   heroTrack: { height: 6, backgroundColor: color.outline, borderRadius: radius.pill, overflow: 'hidden' },
   heroFill: { height: '100%', borderRadius: radius.pill },
   heroStats: { flexDirection: 'row', gap: space.md },
   heroStat: { flex: 1, gap: 4 },
   heroStatLabel: { fontSize: typography.xs, color: color.text.muted, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '600' },
   heroStatValue: { fontSize: typography.base, color: color.text.primary, fontWeight: '600' },
+  healthCard: {
+    backgroundColor: color.surface,
+    borderRadius: radius.lg,
+    padding: space.lg,
+    borderWidth: 1,
+    borderColor: color.outline,
+    marginBottom: space.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+  },
+  healthTitle: { fontSize: typography.base, fontWeight: '700', color: color.text.primary },
+  healthHint: { fontSize: typography.sm, color: color.text.muted, lineHeight: 20 },
+  healthBtn: {
+    backgroundColor: color.success + '22',
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+  },
+  healthBtnText: { fontSize: typography.sm, fontWeight: '700', color: color.success },
+  manualCard: {
+    backgroundColor: color.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: color.outline,
+    marginBottom: space.xl,
+    padding: space.lg,
+    gap: space.sm,
+  },
+  manualTitle: { fontSize: typography.base, fontWeight: '700', color: color.text.primary },
+  manualText: { fontSize: typography.sm, color: color.text.muted, lineHeight: 20 },
+  manualBtn: {
+    alignSelf: 'flex-start',
+    borderRadius: radius.pill,
+    backgroundColor: color.surfaceAlt,
+    borderWidth: 1,
+    borderColor: color.outline,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+  },
+  manualBtnText: { fontSize: typography.sm, fontWeight: '700', color: color.text.primary },
   feedbackCard: {
     marginBottom: space.lg,
     borderRadius: radius.lg,
@@ -407,6 +635,7 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.sm },
   sectionLabel: { fontSize: typography.sm, fontWeight: '600', color: color.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
   sectionAction: { fontSize: typography.sm, fontWeight: '600', color: color.success },
+  sectionHint: { fontSize: typography.sm, color: color.text.muted, lineHeight: 20, marginBottom: space.sm },
   quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   quickCard: {
     width: '48%',
@@ -488,10 +717,19 @@ const styles = StyleSheet.create({
   logColorBar: { width: 3, alignSelf: 'stretch', borderRadius: 2, marginLeft: space.sm },
   logLeft: { flex: 1, gap: 4 },
   logDate: { fontSize: typography.sm, color: color.text.muted },
+  logHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  autoBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: color.success + '22',
+  },
+  autoBadgeText: { fontSize: typography.xs, fontWeight: '700', color: color.success },
   logDuration: { fontSize: typography.base, fontWeight: '700', color: color.text.primary },
   logProgress: { height: 3, backgroundColor: color.outline, borderRadius: 2, overflow: 'hidden' },
   logProgressFill: { height: '100%', borderRadius: 2 },
   logMeta: { fontSize: typography.xs, fontWeight: '600' },
+  estimateHint: { fontSize: typography.xs, color: color.text.muted, marginTop: 2 },
   logActions: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   inlineAction: {
     paddingHorizontal: space.sm,

@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { color, space, radius, typography } from '@axis/theme';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/providers/AuthProvider';
+import { authRoutes } from '@/types/navigation';
 
 type UnitSystem = 'metric' | 'imperial';
 
@@ -69,7 +70,7 @@ export default function OnboardingBody() {
       return;
     }
 
-    router.push('/(auth)/onboarding/goals');
+    router.push(authRoutes.onboardingGoals);
   }
 
   const heightLabel = units === 'metric' ? 'Height (cm)' : 'Height (inches)';
@@ -150,7 +151,7 @@ export default function OnboardingBody() {
         </View>
 
         <View style={styles.buttons}>
-          <Pressable style={styles.skipButton} onPress={() => router.push('/(auth)/onboarding/goals')}>
+          <Pressable style={styles.skipButton} onPress={() => router.push(authRoutes.onboardingGoals)}>
             <Text style={styles.skipButtonText}>Skip for now</Text>
           </Pressable>
 

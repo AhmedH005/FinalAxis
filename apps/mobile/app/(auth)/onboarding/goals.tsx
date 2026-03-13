@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { color, space, radius, typography } from '@axis/theme';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/providers/AuthProvider';
+import { appRoutes } from '@/types/navigation';
 import { useRouter } from 'expo-router';
 
 type Goal = 'lose' | 'maintain' | 'gain' | 'perform';
@@ -60,7 +61,7 @@ export default function OnboardingGoals() {
 
     // Refresh profile in AuthProvider so route guard picks up onboarding_done = true
     await refreshProfile();
-    router.replace('/(app)');
+    router.replace(appRoutes.home);
   }
 
   return (

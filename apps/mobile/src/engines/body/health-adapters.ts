@@ -1,4 +1,10 @@
 import { Platform } from 'react-native';
+import {
+  getAppleHealthSnapshot,
+  getAppleHealthStatus,
+  requestAppleHealthPermissions,
+} from './apple-health';
+import { todayStr } from './utils';
 
 export type HealthAdapterId = 'manual' | 'healthkit' | 'health_connect' | 'whoop';
 
@@ -6,6 +12,8 @@ export interface DailyHealthSnapshot {
   date: string;
   steps: number | null;
   sleep_minutes: number | null;
+  sleep_start?: string | null;
+  sleep_end?: string | null;
   source: HealthAdapterId;
 }
 
@@ -13,6 +21,7 @@ export interface HealthAdapterStatus {
   id: HealthAdapterId;
   label: string;
   available: boolean;
+  connected?: boolean;
   status: string;
 }
 
@@ -22,10 +31,7 @@ export interface HealthAdapter {
   isAvailable: () => Promise<boolean>;
   getTodaySnapshot: () => Promise<DailyHealthSnapshot | null>;
   getStatus: () => Promise<HealthAdapterStatus>;
-}
-
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+  requestAccess?: () => Promise<HealthAdapterStatus>;
 }
 
 export const manualHealthAdapter: HealthAdapter = {
@@ -36,7 +42,7 @@ export const manualHealthAdapter: HealthAdapter = {
   },
   async getTodaySnapshot() {
     return {
-      date: todayKey(),
+      date: todayStr(),
       steps: null,
       sleep_minutes: null,
       source: 'manual',
@@ -56,19 +62,30 @@ export const healthKitAdapter: HealthAdapter = {
   id: 'healthkit',
   label: 'Apple Health',
   async isAvailable() {
-    return Platform.OS === 'ios' && false;
+    const status = await getAppleHealthStatus();
+    return status.available;
   },
   async getTodaySnapshot() {
-    return null;
+    return getAppleHealthSnapshot();
   },
   async getStatus() {
+    const status = await getAppleHealthStatus();
     return {
       id: 'healthkit',
       label: 'Apple Health',
-      available: false,
-      status: Platform.OS === 'ios'
-        ? 'Adapter seam is ready; native bridge not connected yet'
-        : 'Only available on iPhone',
+      available: status.available,
+      connected: status.connected,
+      status: status.status,
+    };
+  },
+  async requestAccess() {
+    const status = await requestAppleHealthPermissions();
+    return {
+      id: 'healthkit',
+      label: 'Apple Health',
+      available: status.available,
+      connected: status.connected,
+      status: status.status,
     };
   },
 };
@@ -144,4 +161,19 @@ export async function getTodayHealthSnapshot() {
 
 export async function getHealthAdapterStatuses() {
   return Promise.all(healthAdapters.map((adapter) => adapter.getStatus()));
+}
+
+export async function requestHealthAdapterAccess(id: HealthAdapterId) {
+  const adapter = healthAdapters.find((item) => item.id === id);
+  if (!adapter?.requestAccess) {
+    return adapter?.getStatus() ?? {
+      id,
+      label: id,
+      available: false,
+      connected: false,
+      status: 'This source cannot be connected from here.',
+    };
+  }
+
+  return adapter.requestAccess();
 }

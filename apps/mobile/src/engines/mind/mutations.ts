@@ -4,6 +4,14 @@ import { useAuth } from '@/providers/AuthProvider';
 import { todayDateStr, countWords } from './utils';
 import type { EntryType, HabitCategory } from './types';
 
+function requireUserId(userId: string | undefined) {
+  if (!userId) {
+    throw new Error('You need to be signed in to update mind data.');
+  }
+
+  return userId;
+}
+
 // ─── Journal ──────────────────────────────────────────────────────────────────
 
 interface CreateEntryInput {
@@ -19,11 +27,12 @@ export function useCreateJournalEntry() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: CreateEntryInput = {}) => {
+      const userId = requireUserId(session?.user.id);
       const body = input.body ?? '';
       const { data, error } = await supabase
         .from('journal_entries')
         .insert({
-          user_id:    session!.user.id,
+          user_id:    userId,
           title:      input.title ?? null,
           body,
           entry_type: input.entry_type ?? 'journal',
@@ -52,9 +61,11 @@ interface UpdateEntryInput {
 }
 
 export function useUpdateJournalEntry() {
+  const { session } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, body, ...rest }: UpdateEntryInput) => {
+      const userId = requireUserId(session?.user.id);
       const patch: Record<string, unknown> = { ...rest };
       if (body !== undefined) {
         patch.body       = body;
@@ -63,7 +74,8 @@ export function useUpdateJournalEntry() {
       const { error } = await supabase
         .from('journal_entries')
         .update(patch)
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', userId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -73,10 +85,16 @@ export function useUpdateJournalEntry() {
 }
 
 export function useDeleteJournalEntry() {
+  const { session } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('journal_entries').delete().eq('id', id);
+      const userId = requireUserId(session?.user.id);
+      const { error } = await supabase
+        .from('journal_entries')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -100,8 +118,9 @@ export function useAddMoodLog() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: AddMoodInput) => {
+      const userId = requireUserId(session?.user.id);
       const { error } = await supabase.from('mood_logs').insert({
-        user_id:      session!.user.id,
+        user_id:      userId,
         logged_at:    new Date().toISOString(),
         mood_score:   input.mood_score,
         energy_level: input.energy_level ?? null,
@@ -118,10 +137,16 @@ export function useAddMoodLog() {
 }
 
 export function useDeleteMoodLog() {
+  const { session } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('mood_logs').delete().eq('id', id);
+      const userId = requireUserId(session?.user.id);
+      const { error } = await supabase
+        .from('mood_logs')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -144,8 +169,9 @@ export function useCreateHabit() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: CreateHabitInput) => {
+      const userId = requireUserId(session?.user.id);
       const { error } = await supabase.from('habits').insert({
-        user_id:     session!.user.id,
+        user_id:     userId,
         name:        input.name.trim(),
         description: input.description ?? null,
         category:    input.category ?? 'mind',
@@ -168,10 +194,16 @@ interface UpdateHabitInput {
 }
 
 export function useUpdateHabit() {
+  const { session } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...rest }: UpdateHabitInput) => {
-      const { error } = await supabase.from('habits').update(rest).eq('id', id);
+      const userId = requireUserId(session?.user.id);
+      const { error } = await supabase
+        .from('habits')
+        .update(rest)
+        .eq('id', id)
+        .eq('user_id', userId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -182,10 +214,16 @@ export function useUpdateHabit() {
 
 /** Soft-deletes a habit by setting is_active = false, preserving logs. */
 export function useArchiveHabit() {
+  const { session } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('habits').update({ is_active: false }).eq('id', id);
+      const userId = requireUserId(session?.user.id);
+      const { error } = await supabase
+        .from('habits')
+        .update({ is_active: false })
+        .eq('id', id)
+        .eq('user_id', userId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -207,8 +245,9 @@ export function useToggleHabitLog() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ habit_id, log_date, completed }: ToggleHabitInput) => {
+      const userId = requireUserId(session?.user.id);
       const { error } = await supabase.from('habit_logs').upsert(
-        { user_id: session!.user.id, habit_id, log_date, completed },
+        { user_id: userId, habit_id, log_date, completed },
         { onConflict: 'user_id,habit_id,log_date' }
       );
       if (error) throw error;

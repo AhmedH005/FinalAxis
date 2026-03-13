@@ -1,4 +1,4 @@
-import { format, formatDistanceToNow, isToday, isYesterday } from 'date-fns';
+import { format, isToday, isYesterday } from 'date-fns';
 import type { UnitSystem } from '@/lib/supabase/database.types';
 
 // ─── Weight ──────────────────────────────────────────────────────────────────

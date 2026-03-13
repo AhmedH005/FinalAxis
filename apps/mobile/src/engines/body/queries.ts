@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { subDays, startOfDay } from 'date-fns';
 import { supabase } from '@/lib/supabase/client';
@@ -5,6 +6,25 @@ import { useAuth } from '@/providers/AuthProvider';
 import { dayStart, dayEnd, todayStr, daysAgoStr } from './utils';
 import { getTodayRecoveryCheckIn as getStoredTodayRecoveryCheckIn } from './recovery';
 import { buildDailyEnergySummary } from './energy';
+import { getAppleHealthSleepRecords, getAppleHealthSnapshot, getAppleHealthWorkoutEnergy } from './apple-health';
+import type { RecoveryCheckIn } from './recovery';
+import type { SleepLog, WorkoutLog } from '@/lib/supabase/database.types';
+import { attachAxisSleepScores, mergeAxisSleepRecords, normalizeAppleHealthSleepRecord, normalizeManualSleepLog } from './sleep';
+
+function mergeRecoveryEntry(
+  storedEntry: RecoveryCheckIn | null,
+  healthSnapshot: Awaited<ReturnType<typeof getAppleHealthSnapshot>>,
+) {
+  if (!storedEntry && !healthSnapshot?.steps) return null;
+
+  return {
+    date: storedEntry?.date ?? healthSnapshot?.date ?? todayStr(),
+    steps: healthSnapshot?.steps ?? storedEntry?.steps ?? null,
+    energy: storedEntry?.energy ?? null,
+    fatigue: storedEntry?.fatigue ?? null,
+    soreness: storedEntry?.soreness ?? null,
+  };
+}
 
 // ─── Goals ───────────────────────────────────────────────────────────────────
 
@@ -51,18 +71,37 @@ export function useTodayHydrationTotal() {
 // ─── Sleep ───────────────────────────────────────────────────────────────────
 
 export function useRecentSleepLogs(limit = 10) {
-  return useQuery({
+  const { data: goals } = useGoals();
+  const sleepTarget = goals?.sleep_target_minutes ?? 480;
+
+  const query = useQuery({
     queryKey: ['body', 'sleep', 'recent', limit],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const fetchLimit = Math.max(limit * 2, 14);
+      const [{ data, error }, healthRecords] = await Promise.all([
+        supabase
         .from('sleep_logs')
         .select('*')
         .order('sleep_end', { ascending: false })
-        .limit(limit);
+        .limit(fetchLimit),
+        getAppleHealthSleepRecords(fetchLimit),
+      ]);
       if (error) throw error;
-      return data ?? [];
+      const normalizedManual = (data ?? []).map((log) => normalizeManualSleepLog(log as SleepLog));
+      const normalizedHealth = healthRecords.map((record) => normalizeAppleHealthSleepRecord(record));
+      return mergeAxisSleepRecords([...normalizedHealth, ...normalizedManual], limit);
     },
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchInterval: 60 * 1000,
   });
+
+  const data = useMemo(
+    () => attachAxisSleepScores(query.data ?? [], sleepTarget),
+    [query.data, sleepTarget],
+  );
+
+  return { ...query, data };
 }
 
 export function useLastNightSleep() {
@@ -159,12 +198,51 @@ export function useTodayNutritionLogs() {
   });
 }
 
+export function useWorkoutLog(workoutId: string | null | undefined) {
+  const { session } = useAuth();
+
+  return useQuery({
+    queryKey: ['body', 'workouts', 'detail', workoutId],
+    enabled: Boolean(workoutId && session?.user.id),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('workout_logs')
+        .select('*')
+        .eq('id', workoutId)
+        .eq('user_id', session!.user.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export function useWorkoutMeasuredEnergy(workout: WorkoutLog | null | undefined) {
+  return useQuery({
+    queryKey: ['body', 'workouts', 'energy', workout?.id, workout?.started_at, workout?.ended_at],
+    enabled: Boolean(workout?.started_at && workout?.ended_at),
+    queryFn: async () => getAppleHealthWorkoutEnergy({
+      startDate: workout!.started_at,
+      endDate: workout!.ended_at!,
+    }),
+    staleTime: 60 * 1000,
+  });
+}
+
 export function useTodayRecoveryCheckIn() {
   const date = todayStr();
   return useQuery({
     queryKey: ['body', 'recovery', 'today', date],
-    queryFn: async () => getStoredTodayRecoveryCheckIn(),
-    staleTime: 60 * 1000,
+    queryFn: async () => {
+      const [storedEntry, healthSnapshot] = await Promise.all([
+        getStoredTodayRecoveryCheckIn(),
+        getAppleHealthSnapshot(),
+      ]);
+      return mergeRecoveryEntry(storedEntry, healthSnapshot);
+    },
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchInterval: 60 * 1000,
   });
 }
 
@@ -223,11 +301,11 @@ export function useDailyEnergySummary() {
 
 // ─── Progress (weekly) ────────────────────────────────────────────────────────
 
-export function useWeeklyNutrition() {
+export function useWeeklyNutrition(days = 7) {
   return useQuery({
-    queryKey: ['body', 'nutrition', 'week'],
+    queryKey: ['body', 'nutrition', 'week', days],
     queryFn: async () => {
-      const start = dayStart(daysAgoStr(6));
+      const start = dayStart(daysAgoStr(days - 1));
       const { data, error } = await supabase
         .from('nutrition_logs')
         .select('logged_at, total_calories, total_protein_g, total_carbs_g, total_fat_g')
@@ -239,11 +317,11 @@ export function useWeeklyNutrition() {
   });
 }
 
-export function useWeeklyHydration() {
+export function useWeeklyHydration(days = 7) {
   return useQuery({
-    queryKey: ['body', 'hydration', 'week'],
+    queryKey: ['body', 'hydration', 'week', days],
     queryFn: async () => {
-      const start = dayStart(daysAgoStr(6));
+      const start = dayStart(daysAgoStr(days - 1));
       const { data, error } = await supabase
         .from('hydration_logs')
         .select('logged_at, amount_ml')
@@ -255,11 +333,11 @@ export function useWeeklyHydration() {
   });
 }
 
-export function useWeeklySleep() {
+export function useWeeklySleep(days = 7) {
   return useQuery({
-    queryKey: ['body', 'sleep', 'week'],
+    queryKey: ['body', 'sleep', 'week', days],
     queryFn: async () => {
-      const start = dayStart(daysAgoStr(6));
+      const start = dayStart(daysAgoStr(days - 1));
       const { data, error } = await supabase
         .from('sleep_logs')
         .select('sleep_end, duration_minutes, quality_rating')

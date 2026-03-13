@@ -6,7 +6,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { format } from 'date-fns';
 import { color, space, radius, typography } from '@axis/theme';
 import {
   MIND_COLOR,
@@ -14,10 +13,10 @@ import {
   formatEntryDate,
   formatEntryTime,
   formatMonthHeader,
-  wordCountLabel,
 } from '@/engines/mind/utils';
 import { useJournalEntries } from '@/engines/mind/queries';
 import { useCreateJournalEntry } from '@/engines/mind/mutations';
+import { journalEntryRoute } from '@/types/navigation';
 import type { JournalEntry } from '@/engines/mind/types';
 
 const ENTRY_TYPE_COLORS: Record<string, string> = {
@@ -41,7 +40,6 @@ function EntryCard({ entry, onPress }: { entry: JournalEntry; onPress: () => voi
 
   return (
     <Pressable style={styles.entryCard} onPress={onPress}>
-      {/* Left accent bar */}
       <View style={[styles.entryAccentBar, { backgroundColor: typeColor }]} />
 
       <View style={styles.entryCardContent}>
@@ -97,7 +95,6 @@ export default function JournalListScreen() {
     );
   }, [entries, search]);
 
-  // Group entries by month
   const grouped = useMemo(() => {
     const map = new Map<string, JournalEntry[]>();
     for (const entry of filtered) {
@@ -111,12 +108,12 @@ export default function JournalListScreen() {
   function handleNewEntry(type: 'journal' | 'quick_thought' | 'note' | 'reflection' = 'journal') {
     createEntry.mutate(
       { entry_type: type, entry_date: today },
-      { onSuccess: (entry) => router.push(`/(app)/mind/journal/${entry.id}` as any) }
+      { onSuccess: (entry) => router.push(journalEntryRoute(entry.id)) }
     );
   }
 
   function openEntry(entry: JournalEntry) {
-    router.push(`/(app)/mind/journal/${entry.id}` as any);
+    router.push(journalEntryRoute(entry.id));
   }
 
   return (

@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { color, space, radius, typography } from '@axis/theme';
+import { authRoutes } from '@/types/navigation';
 
 const SIGNALS = [
   { icon: 'heart-pulse', label: 'Body state' },
@@ -78,14 +79,14 @@ export default function WelcomeScreen() {
         <View style={styles.actions}>
           <Pressable
             style={styles.primaryButton}
-            onPress={() => router.push('/(auth)/signup')}
+            onPress={() => router.push(authRoutes.signup)}
           >
             <Text style={styles.primaryButtonText}>Create account</Text>
           </Pressable>
 
           <Pressable
             style={styles.ghostButton}
-            onPress={() => router.push('/(auth)/login')}
+            onPress={() => router.push(authRoutes.login)}
           >
             <Text style={styles.ghostButtonText}>I already have an account</Text>
           </Pressable>

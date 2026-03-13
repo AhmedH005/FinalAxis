@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { color, space, radius, typography } from '@axis/theme';
 import { useAuth } from '@/providers/AuthProvider';
+import { authRoutes } from '@/types/navigation';
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -43,7 +44,7 @@ export default function SignupScreen() {
       Alert.alert(
         'Check your email',
         `We sent a confirmation link to ${email.trim().toLowerCase()}. Open it to activate your account, then sign in.`,
-        [{ text: 'OK', onPress: () => router.replace('/(auth)/login') }],
+        [{ text: 'OK', onPress: () => router.replace(authRoutes.login) }],
       );
     }
   }
@@ -126,7 +127,7 @@ export default function SignupScreen() {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Already registered?</Text>
-            <Pressable onPress={() => router.replace('/(auth)/login')}>
+            <Pressable onPress={() => router.replace(authRoutes.login)}>
               <Text style={styles.footerLink}>Sign in</Text>
             </Pressable>
           </View>

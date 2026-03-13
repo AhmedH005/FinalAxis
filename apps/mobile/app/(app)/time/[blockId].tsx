@@ -25,12 +25,15 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function TimeBlockDetailScreen() {
-  const { session } = useAuth();
+  const { session, timeSession, hasDedicatedTimeSupabase } = useAuth();
   const params = useLocalSearchParams<{ blockId?: string | string[] }>();
 
-  const userId = session?.user.id ?? null;
+  const sourceUsers = {
+    primaryUserId: session?.user.id ?? null,
+    timeUserId: hasDedicatedTimeSupabase ? timeSession?.user.id ?? null : null,
+  };
   const blockId = typeof params.blockId === 'string' ? params.blockId : null;
-  const { data: block, isLoading } = useTimeBlockDetail(userId, blockId);
+  const { data: block, isLoading } = useTimeBlockDetail(sourceUsers, blockId);
 
   if (isLoading) {
     return (
@@ -113,7 +116,7 @@ export default function TimeBlockDetailScreen() {
               <DetailRow label="Estimate" value={formatDurationLabel(block.task.estMinutes)} />
             ) : null}
             {block.task.due ? (
-              <DetailRow label="Due" value={format(parseISO(block.task.due), 'EEE, MMM d | h:mm a')} />
+              <DetailRow label="Due" value={format(parseISO(block.task.due), 'EEE, MMM d')} />
             ) : null}
             {block.task.completedAt ? (
               <DetailRow label="Completed" value={format(parseISO(block.task.completedAt), 'EEE, MMM d | h:mm a')} />

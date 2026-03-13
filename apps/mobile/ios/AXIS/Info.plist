@@ -28,6 +28,10 @@
 	<string>12.0</string>
 	<key>NSCameraUsageDescription</key>
 	<string>AXIS uses the camera to scan food barcodes for faster nutrition logging.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>AXIS reads your Apple Health sleep and step data so sleep, recovery, and movement tracking can fill automatically.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>AXIS can sync health data you choose to share.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

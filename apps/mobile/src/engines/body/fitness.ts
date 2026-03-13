@@ -27,6 +27,54 @@ export function getExercisesForWorkoutType(workoutType: string) {
   return getExerciseCatalog().filter((exercise) => exercise.workout_types.includes(workoutType));
 }
 
+function getWorkoutPatterns(workout: WorkoutLog) {
+  return Array.from(new Set(
+    (workout.exercises ?? [])
+      .map((exercise) => exercise.exercise_id)
+      .filter((exerciseId): exerciseId is string => Boolean(exerciseId))
+      .map((exerciseId) => getExerciseById(exerciseId)?.movement_pattern)
+      .filter((pattern): pattern is MovementPattern => Boolean(pattern)),
+  ));
+}
+
+export function getWorkoutDisplayName(workout: WorkoutLog) {
+  const explicitName = workout.name?.trim();
+  if (explicitName) return explicitName;
+
+  const workoutType = workout.workout_type?.trim() || 'Workout';
+  if (!/strength/i.test(workoutType)) return workoutType;
+
+  const patterns = getWorkoutPatterns(workout);
+  const hasUpper = patterns.some((pattern) => ['push', 'pull', 'carry'].includes(pattern));
+  const hasLower = patterns.some((pattern) => ['squat', 'hinge'].includes(pattern));
+  const hasConditioning = patterns.includes('conditioning');
+  const hasCore = patterns.includes('core');
+
+  if (hasConditioning && !hasUpper && !hasLower) {
+    return hasCore ? 'Conditioning + Core' : 'Conditioning';
+  }
+
+  if (hasUpper && hasLower) return 'Full Body';
+  if (hasLower && !hasUpper) return 'Lower Body';
+  if (hasUpper && !hasLower) {
+    if (patterns.includes('push') && !patterns.includes('pull')) return 'Push';
+    if (patterns.includes('pull') && !patterns.includes('push')) return 'Pull';
+    return 'Upper Body';
+  }
+
+  return workoutType;
+}
+
+export function getWorkoutExercisePreview(workout: WorkoutLog, limit = 2) {
+  const names = (workout.exercises ?? [])
+    .map((exercise) => exercise.name?.trim())
+    .filter((name): name is string => Boolean(name));
+
+  if (names.length === 0) return null;
+  if (names.length <= limit) return names.join(' · ');
+  return `${names.slice(0, limit).join(' · ')} +${names.length - limit} more`;
+}
+
 export function summarizeWorkoutHistory(workouts: WorkoutLog[]) {
   const recentExercises = workouts
     .flatMap((workout) => workout.exercises ?? [])

@@ -7,6 +7,7 @@ import { StyleSheet } from 'react-native';
 
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
 import { QueryProvider } from '@/providers/QueryProvider';
+import { appRoutes, authRoutes } from '@/types/navigation';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -20,29 +21,28 @@ function RouteGuard() {
 
     SplashScreen.hideAsync();
 
-    const inAuthGroup = segments[0] === '(auth)';
+    const routeSegments = segments as readonly string[];
+    const inAuthGroup = routeSegments[0] === '(auth)';
 
     if (!session) {
       if (!inAuthGroup) {
-        router.replace('/(auth)/welcome');
+        router.replace(authRoutes.welcome);
       }
       return;
     }
 
-    // Authenticated — check onboarding
     if (profile && !profile.onboarding_done) {
-      const inOnboarding = segments[1] === 'onboarding';
+      const inOnboarding = routeSegments.includes('onboarding');
       if (!inOnboarding) {
-        router.replace('/(auth)/onboarding/profile');
+        router.replace(authRoutes.onboardingProfile);
       }
       return;
     }
 
-    if (!inAuthGroup) return; // already in (app), nothing to do
+    if (!inAuthGroup) return;
 
-    // Authenticated + onboarded → send to app
-    router.replace('/(app)');
-  }, [session, profile, loading, segments]);
+    router.replace(appRoutes.home);
+  }, [session, profile, loading, segments, router]);
 
   return <Slot />;
 }

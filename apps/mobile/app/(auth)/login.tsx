@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { color, space, radius, typography } from '@axis/theme';
 import { useAuth } from '@/providers/AuthProvider';
+import { authRoutes } from '@/types/navigation';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -106,7 +107,7 @@ export default function LoginScreen() {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Need an account?</Text>
-            <Pressable onPress={() => router.replace('/(auth)/signup')}>
+            <Pressable onPress={() => router.replace(authRoutes.signup)}>
               <Text style={styles.footerLink}>Create one</Text>
             </Pressable>
           </View>

@@ -7,7 +7,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { format, isToday, isThisWeek } from 'date-fns';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { color, space, radius, typography } from '@axis/theme';
 import {
   useRecentWorkouts,
@@ -18,15 +17,22 @@ import {
   formatDuration,
   getRecommendedWorkout,
   computeRecoveryScore,
+  estimateWorkoutExpenditure,
+  buildWorkoutExpenditureBreakdown,
+  getWorkoutDisplayName,
+  getWorkoutExercisePreview,
   WORKOUT_PROGRAMS,
   getProgramById,
   getNextProgramDay,
   type WorkoutProgram,
   type ProgramDay,
 } from '@/engines/body';
-
-const PROGRAM_KEY = '@axis/workout_program';
-const LAST_DAY_KEY = '@axis/workout_last_day';
+import { workoutDetailRoute, workoutSessionRoute } from '@/types/navigation';
+import {
+  loadWorkoutProgramState,
+  saveWorkoutProgramSelection,
+} from '@/features/body/workouts/storage';
+import type { WorkoutExercise } from '@/lib/supabase/database.types';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -239,13 +245,10 @@ export default function WorkoutsScreen() {
     useCallback(() => {
       let active = true;
       (async () => {
-        const [prog, day] = await Promise.all([
-          AsyncStorage.getItem(PROGRAM_KEY),
-          AsyncStorage.getItem(LAST_DAY_KEY),
-        ]);
+        const { programId, lastDayId } = await loadWorkoutProgramState();
         if (active) {
-          setSelectedProgramId(prog);
-          setLastDayId(day);
+          setSelectedProgramId(programId);
+          setLastDayId(lastDayId);
           setLoaded(true);
         }
       })();
@@ -255,11 +258,7 @@ export default function WorkoutsScreen() {
 
   const handleSelectProgram = useCallback(async (id: string) => {
     const value = id || null;
-    if (value) {
-      await AsyncStorage.setItem(PROGRAM_KEY, value);
-    } else {
-      await AsyncStorage.removeItem(PROGRAM_KEY);
-    }
+    await saveWorkoutProgramSelection(value);
     setSelectedProgramId(value);
   }, []);
 
@@ -295,19 +294,16 @@ export default function WorkoutsScreen() {
       params.dayId = quickDayId;
       params.dayLabel = quickDayLabel ?? quickDayId;
     }
-    router.push({ pathname: '/(app)/body/workouts/session', params });
+    router.push(workoutSessionRoute(params));
   };
 
   const handleStartSmartSession = () => {
-    router.push({
-      pathname: '/(app)/body/workouts/session',
-      params: {
-        dayLabel: smartRecommendation.title,
-        workoutType: smartRecommendation.workout_type,
-        intensity: smartRecommendation.intensity,
-        exerciseIds: smartRecommendation.exercise_ids.join(','),
-      },
-    });
+    router.push(workoutSessionRoute({
+      dayLabel: smartRecommendation.title,
+      workoutType: smartRecommendation.workout_type,
+      intensity: smartRecommendation.intensity,
+      exerciseIds: smartRecommendation.exercise_ids.join(','),
+    }));
   };
 
   if (!loaded) return (
@@ -328,7 +324,7 @@ export default function WorkoutsScreen() {
           <Text style={s.headerTitle}>Workouts</Text>
           <Pressable
             style={s.logBtn}
-            onPress={() => router.push({ pathname: '/(app)/body/workouts/session', params: { mode: 'log' } })}
+            onPress={() => router.push(workoutSessionRoute({ mode: 'log' }))}
           >
             <MaterialCommunityIcons name="plus" size={18} color={color.text.primary} />
             <Text style={s.logBtnText}>Log</Text>
@@ -425,21 +421,55 @@ export default function WorkoutsScreen() {
               <Text style={s.sectionTitle}>Recent</Text>
             </View>
             {recentFive.map((w) => (
-              <View key={w.id} style={s.historyCard}>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.historyType}>{w.workout_type}</Text>
+              <Pressable
+                key={w.id}
+                style={s.historyCard}
+                onPress={() => router.push(workoutDetailRoute(w.id))}
+              >
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={s.historyType}>{getWorkoutDisplayName(w)}</Text>
                   <Text style={s.historyMeta}>
                     {format(new Date(w.started_at), isToday(new Date(w.started_at)) ? "'Today'" : 'EEE, MMM d')}
                     {w.duration_minutes ? ` · ${formatDuration(w.duration_minutes)}` : ''}
+                    {w.workout_type && getWorkoutDisplayName(w) !== w.workout_type ? ` · ${w.workout_type}` : ''}
+                  </Text>
+                  {getWorkoutExercisePreview(w) ? (
+                    <Text style={s.historyDetail}>{getWorkoutExercisePreview(w)}</Text>
+                  ) : null}
+                  <Text style={s.historySubdetail}>
+                    {(w.exercises ?? []).reduce((sum: number, exercise: WorkoutExercise) => sum + (exercise.sets ?? 0), 0)} sets
                     {(w.exercises ?? []).length > 0 ? ` · ${(w.exercises ?? []).length} exercises` : ''}
                   </Text>
+                  <Text style={s.historyBurn}>
+                    Est. {energySummary.body_weight_kg
+                      ? (() => {
+                        const breakdown = buildWorkoutExpenditureBreakdown({
+                          workoutType: w.workout_type,
+                          durationMinutes: w.duration_minutes,
+                          intensity: w.intensity,
+                          bodyWeightKg: energySummary.body_weight_kg,
+                          exercises: w.exercises,
+                        });
+                        return breakdown.total_estimated_calories || estimateWorkoutExpenditure({
+                          workoutType: w.workout_type,
+                          durationMinutes: w.duration_minutes,
+                          intensity: w.intensity,
+                          bodyWeightKg: energySummary.body_weight_kg,
+                          exercises: w.exercises,
+                        });
+                      })()
+                      : '—'} kcal
+                  </Text>
                 </View>
-                <View style={[s.intensityDot, {
-                  backgroundColor:
-                    w.intensity === 'high' ? '#FF6B6B' :
-                    w.intensity === 'moderate' ? '#F9B24E' : '#43D9A3',
-                }]} />
-              </View>
+                <View style={s.historyRight}>
+                  <View style={[s.intensityDot, {
+                    backgroundColor:
+                      w.intensity === 'high' ? '#FF6B6B' :
+                      w.intensity === 'moderate' ? '#F9B24E' : '#43D9A3',
+                  }]} />
+                  <MaterialCommunityIcons name="chevron-right" size={18} color={color.text.muted} />
+                </View>
+              </Pressable>
             ))}
           </>
         )}
@@ -564,6 +594,10 @@ const s = StyleSheet.create({
   historyCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: color.surface, borderRadius: radius.lg, padding: space.lg, gap: space.md },
   historyType: { fontSize: typography.base, fontWeight: '600', color: color.text.primary },
   historyMeta: { fontSize: typography.sm, color: color.text.muted, marginTop: 2 },
+  historyDetail: { fontSize: typography.sm, color: color.text.primary },
+  historySubdetail: { fontSize: typography.xs, color: color.text.muted, textTransform: 'uppercase', letterSpacing: 0.4, fontWeight: '700' },
+  historyBurn: { fontSize: typography.xs, fontWeight: '700', color: color.success, textTransform: 'uppercase', letterSpacing: 0.4 },
+  historyRight: { alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch', paddingVertical: 4 },
   intensityDot: { width: 8, height: 8, borderRadius: radius.pill },
   // Modal
   modalContainer: { flex: 1, backgroundColor: color.bg },

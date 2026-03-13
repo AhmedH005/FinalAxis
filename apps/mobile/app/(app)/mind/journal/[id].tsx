@@ -77,7 +77,7 @@ export default function JournalEntryScreen() {
         );
       }, AUTOSAVE_DELAY);
     },
-    [id]
+    [id, updateEntry]
   );
 
   function handleTitleChange(text: string) {

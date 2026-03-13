@@ -4,6 +4,14 @@ import { useAuth } from '@/providers/AuthProvider';
 import type { MealType, IntensityLevel } from './types';
 import type { FoodItem, WorkoutExercise } from '@/lib/supabase/database.types';
 
+function requireUserId(userId: string | undefined) {
+  if (!userId) {
+    throw new Error('You need to be signed in to update body data.');
+  }
+
+  return userId;
+}
+
 // ─── Hydration ────────────────────────────────────────────────────────────────
 
 export function useAddHydrationLog() {
@@ -11,8 +19,9 @@ export function useAddHydrationLog() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (amount_ml: number) => {
+      const userId = requireUserId(session?.user.id);
       const { error } = await supabase.from('hydration_logs').insert({
-        user_id: session!.user.id,
+        user_id: userId,
         amount_ml,
         logged_at: new Date().toISOString(),
       });
@@ -29,11 +38,12 @@ export function useDeleteHydrationLog() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
+      const userId = requireUserId(session?.user.id);
       const { error } = await supabase
         .from('hydration_logs')
         .delete()
         .eq('id', id)
-        .eq('user_id', session!.user.id);
+        .eq('user_id', userId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -47,6 +57,7 @@ export function useLowerLatestHydrationLog() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
+      const userId = requireUserId(session?.user.id);
       const start = new Date();
       start.setHours(0, 0, 0, 0);
       const end = new Date();
@@ -55,7 +66,7 @@ export function useLowerLatestHydrationLog() {
       const { data: latestLog, error: fetchError } = await supabase
         .from('hydration_logs')
         .select('id, amount_ml')
-        .eq('user_id', session!.user.id)
+        .eq('user_id', userId)
         .gte('logged_at', start.toISOString())
         .lte('logged_at', end.toISOString())
         .order('logged_at', { ascending: false })
@@ -71,7 +82,7 @@ export function useLowerLatestHydrationLog() {
         .from('hydration_logs')
         .delete()
         .eq('id', latestLog.id)
-        .eq('user_id', session!.user.id);
+        .eq('user_id', userId);
 
       if (deleteError) throw deleteError;
       return latestLog;
@@ -87,19 +98,26 @@ export function useLowerLatestHydrationLog() {
 interface AddSleepInput {
   hours: number;
   quality_rating: number | null;
+  sleep_start?: string | null;
+  sleep_end?: string | null;
 }
 
 export function useAddSleepLog() {
   const { session } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ hours, quality_rating }: AddSleepInput) => {
-      const sleep_end = new Date();
-      const sleep_start = new Date(sleep_end.getTime() - hours * 60 * 60 * 1000);
+    mutationFn: async ({ hours, quality_rating, sleep_start, sleep_end }: AddSleepInput) => {
+      const userId = requireUserId(session?.user.id);
+      const resolvedSleepEnd = sleep_end ? new Date(sleep_end) : new Date();
+      const resolvedSleepStart = sleep_start
+        ? new Date(sleep_start)
+        : new Date(resolvedSleepEnd.getTime() - hours * 60 * 60 * 1000);
+      const duration_minutes = Math.round((resolvedSleepEnd.getTime() - resolvedSleepStart.getTime()) / 60000);
       const { error } = await supabase.from('sleep_logs').insert({
-        user_id: session!.user.id,
-        sleep_start: sleep_start.toISOString(),
-        sleep_end: sleep_end.toISOString(),
+        user_id: userId,
+        sleep_start: resolvedSleepStart.toISOString(),
+        sleep_end: resolvedSleepEnd.toISOString(),
+        duration_minutes,
         quality_rating: quality_rating ?? null,
         source: 'manual',
       });
@@ -112,10 +130,16 @@ export function useAddSleepLog() {
 }
 
 export function useDeleteSleepLog() {
+  const { session } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('sleep_logs').delete().eq('id', id);
+      const userId = requireUserId(session?.user.id);
+      const { error } = await supabase
+        .from('sleep_logs')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -137,8 +161,9 @@ export function useAddBodyMetric() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ metric_type, value, notes }: AddBodyMetricInput) => {
+      const userId = requireUserId(session?.user.id);
       const { error } = await supabase.from('body_metrics').insert({
-        user_id: session!.user.id,
+        user_id: userId,
         metric_type,
         value,
         recorded_at: new Date().toISOString(),
@@ -154,10 +179,16 @@ export function useAddBodyMetric() {
 }
 
 export function useDeleteBodyMetric() {
+  const { session } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('body_metrics').delete().eq('id', id);
+      const userId = requireUserId(session?.user.id);
+      const { error } = await supabase
+        .from('body_metrics')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -181,10 +212,11 @@ export function useAddWorkoutLog() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ workout_type, name, duration_minutes, intensity, exercises }: AddWorkoutInput) => {
+      const userId = requireUserId(session?.user.id);
       const started_at = new Date();
       const ended_at = new Date(started_at.getTime() + duration_minutes * 60 * 1000);
       const { error } = await supabase.from('workout_logs').insert({
-        user_id: session!.user.id,
+        user_id: userId,
         workout_type,
         name: name || null,
         started_at: started_at.toISOString(),
@@ -203,10 +235,16 @@ export function useAddWorkoutLog() {
 }
 
 export function useDeleteWorkoutLog() {
+  const { session } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('workout_logs').delete().eq('id', id);
+      const userId = requireUserId(session?.user.id);
+      const { error } = await supabase
+        .from('workout_logs')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -240,8 +278,9 @@ export function useAddNutritionLog() {
       total_fat_g,
       food_items,
     }: AddNutritionInput) => {
+      const userId = requireUserId(session?.user.id);
       const { error } = await supabase.from('nutrition_logs').insert({
-        user_id: session!.user.id,
+        user_id: userId,
         meal_type,
         logged_at: new Date().toISOString(),
         food_items: food_items ?? [],
@@ -260,10 +299,16 @@ export function useAddNutritionLog() {
 }
 
 export function useDeleteNutritionLog() {
+  const { session } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('nutrition_logs').delete().eq('id', id);
+      const userId = requireUserId(session?.user.id);
+      const { error } = await supabase
+        .from('nutrition_logs')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -286,8 +331,9 @@ export function useUpdateGoals() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: UpdateGoalsInput) => {
+      const userId = requireUserId(session?.user.id);
       const { error } = await supabase.from('user_goals').upsert({
-        user_id: session!.user.id,
+        user_id: userId,
         ...input,
       });
       if (error) throw error;
@@ -310,10 +356,11 @@ export function useUpdateProfile() {
   const { session, refreshProfile } = useAuth();
   return useMutation({
     mutationFn: async (input: UpdateProfileInput) => {
+      const userId = requireUserId(session?.user.id);
       const { error } = await supabase
         .from('profiles')
         .update(input)
-        .eq('id', session!.user.id);
+        .eq('id', userId);
       if (error) throw error;
     },
     onSuccess: () => {

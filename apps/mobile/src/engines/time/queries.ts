@@ -1,34 +1,41 @@
 import { useQuery } from '@tanstack/react-query';
 import { addDays, endOfDay, startOfDay, startOfWeek } from 'date-fns';
-import { listTimeBlocks } from './api';
+import { listTimeBlocks, type TimeSourceUsers } from './api';
 
-export function useTimeBlocksRange(userId: string | null | undefined, start: Date, end: Date) {
+export function useTimeBlocksRange(users: TimeSourceUsers, start: Date, end: Date) {
   return useQuery({
-    queryKey: ['time', 'blocks', userId, start.toISOString(), end.toISOString()],
-    queryFn: () => listTimeBlocks(userId!, start, end),
-    enabled: Boolean(userId),
+    queryKey: [
+      'time',
+      'blocks',
+      users.primaryUserId ?? null,
+      users.timeUserId ?? null,
+      start.toISOString(),
+      end.toISOString(),
+    ],
+    queryFn: () => listTimeBlocks(users, start, end),
+    enabled: Boolean(users.primaryUserId || users.timeUserId),
     staleTime: 1000 * 60,
   });
 }
 
-export function useTimeCompanionWindow(userId: string | null | undefined) {
+export function useTimeCompanionWindow(users: TimeSourceUsers) {
   const start = startOfWeek(new Date(), { weekStartsOn: 1 });
   const end = endOfDay(addDays(new Date(), 14));
 
-  return useTimeBlocksRange(userId, start, end);
+  return useTimeBlocksRange(users, start, end);
 }
 
-export function useTimeBlockDetail(userId: string | null | undefined, blockId: string | null | undefined) {
+export function useTimeBlockDetail(users: TimeSourceUsers, blockId: string | null | undefined) {
   const start = startOfDay(addDays(new Date(), -30));
   const end = endOfDay(addDays(new Date(), 45));
 
   return useQuery({
-    queryKey: ['time', 'block', userId, blockId],
+    queryKey: ['time', 'block', users.primaryUserId ?? null, users.timeUserId ?? null, blockId],
     queryFn: async () => {
-      const blocks = await listTimeBlocks(userId!, start, end);
+      const blocks = await listTimeBlocks(users, start, end);
       return blocks.find((block) => block.id === blockId) ?? null;
     },
-    enabled: Boolean(userId && blockId),
+    enabled: Boolean((users.primaryUserId || users.timeUserId) && blockId),
     staleTime: 1000 * 60,
   });
 }

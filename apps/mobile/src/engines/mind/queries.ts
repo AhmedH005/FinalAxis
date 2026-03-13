@@ -23,6 +23,23 @@ export function useJournalEntries(limit = 40) {
   });
 }
 
+export function useRecentJournalEntries(days = 30) {
+  return useQuery({
+    queryKey: ['mind', 'journal', 'recent', days],
+    queryFn: async () => {
+      const since = format(subDays(new Date(), days - 1), 'yyyy-MM-dd');
+      const { data, error } = await supabase
+        .from('journal_entries')
+        .select('*')
+        .gte('entry_date', since)
+        .order('entry_date', { ascending: false })
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
 export function useTodayJournalEntry() {
   const date = todayDateStr();
   return useQuery({
@@ -130,22 +147,6 @@ export function useRecentMoodLogs(days = 14) {
   });
 }
 
-export function useWeeklyMood() {
-  return useQuery({
-    queryKey: ['mind', 'mood', 'week'],
-    queryFn: async () => {
-      const start = startOfDay(subDays(new Date(), 6)).toISOString();
-      const { data, error } = await supabase
-        .from('mood_logs')
-        .select('logged_at, mood_score')
-        .gte('logged_at', start)
-        .order('logged_at', { ascending: true });
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-}
-
 // ─── Habits ───────────────────────────────────────────────────────────────────
 
 export function useHabits() {
@@ -198,7 +199,6 @@ export function useHabitLogsRecent(habitId: string, days = 30) {
   });
 }
 
-/** Merges habits with today's completion status. */
 export function useHabitsWithStatus(): { data: HabitWithStatus[]; isLoading: boolean } {
   const { data: habits  = [], isLoading: habitsLoading } = useHabits();
   const { data: todayLogs = [], isLoading: logsLoading }  = useTodayHabitLogs();
@@ -215,11 +215,11 @@ export function useHabitsWithStatus(): { data: HabitWithStatus[]; isLoading: boo
   return { data, isLoading: habitsLoading || logsLoading };
 }
 
-export function useWeeklyHabitLogs() {
+export function useRecentHabitLogs(days = 14) {
   return useQuery({
-    queryKey: ['mind', 'habit_logs', 'week'],
+    queryKey: ['mind', 'habit_logs', 'recent', days],
     queryFn: async () => {
-      const since = format(subDays(new Date(), 6), 'yyyy-MM-dd');
+      const since = format(subDays(new Date(), days - 1), 'yyyy-MM-dd');
       const { data, error } = await supabase
         .from('habit_logs')
         .select('habit_id, log_date, completed')

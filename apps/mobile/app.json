@@ -43,6 +43,13 @@
           "resizeMode": "contain"
         }
       ],
+      [
+        "react-native-health",
+        {
+          "healthSharePermission": "AXIS reads your Apple Health sleep, steps, workouts, and active energy so recovery and calorie tracking can fill automatically.",
+          "healthUpdatePermission": "AXIS can sync health data you choose to share."
+        }
+      ],
       "expo-font"
     ],
     "experiments": {
