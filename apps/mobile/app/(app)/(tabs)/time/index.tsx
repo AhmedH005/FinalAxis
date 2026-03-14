@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -31,13 +31,8 @@ import {
   type TimeViewMode,
 } from '@/engines/time';
 
-const VIEW_OPTIONS: Array<{ key: TimeViewMode; label: string }> = [
-  { key: 'today', label: 'Today' },
-  { key: 'upcoming', label: 'Upcoming' },
-  { key: 'week', label: 'Week' },
-];
 
-function ModeChip({
+const ModeChip = memo(function ModeChip({
   label,
   active,
   onPress,
@@ -51,9 +46,9 @@ function ModeChip({
       <Text style={[styles.modeChipText, active && styles.modeChipTextActive]}>{label}</Text>
     </Pressable>
   );
-}
+});
 
-function BlockCard({
+const BlockCard = memo(function BlockCard({
   block,
   tone = 'default',
 }: {
@@ -107,7 +102,7 @@ function BlockCard({
       <MaterialCommunityIcons name="chevron-right" size={16} color={color.outline} />
     </Pressable>
   );
-}
+});
 
 function EmptyState({
   title,
@@ -248,6 +243,10 @@ export default function TimeCompanionScreen() {
   const { session, timeSession, timeLoading, timeAuthError, hasDedicatedTimeSupabase } = useAuth();
   const [mode, setMode] = useState<TimeViewMode>('today');
 
+  const setToday = useCallback(() => setMode('today'), []);
+  const setUpcoming = useCallback(() => setMode('upcoming'), []);
+  const setWeek = useCallback(() => setMode('week'), []);
+
   const sourceUsers = useMemo(
     () => ({
       primaryUserId: session?.user.id ?? null,
@@ -296,14 +295,9 @@ export default function TimeCompanionScreen() {
         </View>
 
         <View style={styles.modeRow}>
-          {VIEW_OPTIONS.map((option) => (
-            <ModeChip
-              key={option.key}
-              label={option.label}
-              active={mode === option.key}
-              onPress={() => setMode(option.key)}
-            />
-          ))}
+          <ModeChip label="Today" active={mode === 'today'} onPress={setToday} />
+          <ModeChip label="Upcoming" active={mode === 'upcoming'} onPress={setUpcoming} />
+          <ModeChip label="Week" active={mode === 'week'} onPress={setWeek} />
         </View>
 
         {timeLoading || isLoading ? (

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { color, space, radius, typography } from '@axis/theme';
@@ -13,7 +14,7 @@ const PILLARS = [
   { icon: 'chart-bell-curve', label: 'Patterns', sub: 'See cross-signal trends', accent: '#60A5FA', route: appRoutes.mindPatterns },
 ] as const;
 
-export function PromptHero({
+export const PromptHero = memo(function PromptHero({
   prompt,
   wordCount,
   isLoading,
@@ -54,9 +55,9 @@ export function PromptHero({
       </Pressable>
     </View>
   );
-}
+});
 
-export function MoodSection({
+export const MoodSection = memo(function MoodSection({
   moodScore,
   isSaving,
   onQuickMood,
@@ -105,9 +106,9 @@ export function MoodSection({
       )}
     </View>
   );
-}
+});
 
-export function HabitsSection({
+export const HabitsSection = memo(function HabitsSection({
   isLoading,
   habits,
   completedCount,
@@ -179,9 +180,9 @@ export function HabitsSection({
       )}
     </View>
   );
-}
+});
 
-export function PillarLinks({
+export const PillarLinks = memo(function PillarLinks({
   onOpen,
 }: {
   onOpen: (route: (typeof PILLARS)[number]['route']) => void;
@@ -202,7 +203,7 @@ export function PillarLinks({
       ))}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   promptCard: {

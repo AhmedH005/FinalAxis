@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { subDays, startOfDay } from 'date-fns';
 import { format } from 'date-fns';
@@ -20,6 +21,7 @@ export function useJournalEntries(limit = 40) {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -37,6 +39,7 @@ export function useRecentJournalEntries(days = 30) {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -56,6 +59,7 @@ export function useTodayJournalEntry() {
       if (error) throw error;
       return data ?? null;
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -128,6 +132,7 @@ export function useTodayMood() {
       if (error) throw error;
       return data ?? null;
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -144,6 +149,7 @@ export function useRecentMoodLogs(days = 14) {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -178,6 +184,7 @@ export function useTodayHabitLogs() {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -203,14 +210,17 @@ export function useHabitsWithStatus(): { data: HabitWithStatus[]; isLoading: boo
   const { data: habits  = [], isLoading: habitsLoading } = useHabits();
   const { data: todayLogs = [], isLoading: logsLoading }  = useTodayHabitLogs();
 
-  const data: HabitWithStatus[] = habits.map(habit => {
-    const log = todayLogs.find(l => l.habit_id === habit.id);
-    return {
-      ...habit,
-      todayCompleted: log?.completed ?? false,
-      streak: 0, // populated individually in the detail view
-    };
-  });
+  const data = useMemo<HabitWithStatus[]>(
+    () => habits.map(habit => {
+      const log = todayLogs.find(l => l.habit_id === habit.id);
+      return {
+        ...habit,
+        todayCompleted: log?.completed ?? false,
+        streak: 0,
+      };
+    }),
+    [habits, todayLogs],
+  );
 
   return { data, isLoading: habitsLoading || logsLoading };
 }
@@ -228,5 +238,6 @@ export function useRecentHabitLogs(days = 14) {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 }

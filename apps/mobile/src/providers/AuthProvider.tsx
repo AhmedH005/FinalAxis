@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase/client';
 import { hasDedicatedTimeSupabase, timeSupabase } from '@/lib/supabase/timeClient';
@@ -49,7 +49,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [session, fetchProfile]);
 
   useEffect(() => {
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
       if (!hasDedicatedTimeSupabase) {
@@ -63,7 +62,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
       if (!hasDedicatedTimeSupabase) {
@@ -96,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  async function signIn(email: string, password: string) {
+  const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error as Error | null };
 
@@ -105,7 +103,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (timeSignInError) {
         const msg = timeSignInError.message.toLowerCase();
         if (msg.includes('invalid login') || msg.includes('user not found') || msg.includes('no user found')) {
-          // No account on Time Supabase yet — create one so future syncs work
           const { error: timeSignUpError } = await timeSupabase.auth.signUp({ email, password });
           setTimeAuthError(timeSignUpError?.message ?? null);
         } else {
@@ -119,19 +116,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     return { error: null };
-  }
+  }, []);
 
-  async function signUp(email: string, password: string): Promise<{ error: Error | null; needsConfirmation: boolean }> {
+  const signUp = useCallback(async (email: string, password: string): Promise<{ error: Error | null; needsConfirmation: boolean }> => {
     const { error, data } = await supabase.auth.signUp({ email, password });
 
     if (error) return { error: error as Error | null, needsConfirmation: false };
 
-    // Email confirmation required — no session yet, DB trigger already created the profile
     if (!data.session) {
       return { error: null, needsConfirmation: true };
     }
 
-    // Immediate session (email confirmation disabled) — ensure profile row exists
     await supabase.from('profiles').upsert({
       id: data.user!.id,
       onboarding_done: false,
@@ -144,7 +139,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (timeSignUpError) {
         const msg = timeSignUpError.message.toLowerCase();
         if (msg.includes('already registered') || msg.includes('already been registered') || msg.includes('user already exists')) {
-          // Account already exists on Time Supabase (e.g. created via web scheduler) — sign in instead
           const { error: timeSignInError } = await timeSupabase.auth.signInWithPassword({ email, password });
           setTimeAuthError(timeSignInError?.message ?? null);
         } else {
@@ -158,33 +152,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     return { error: null, needsConfirmation: false };
-  }
+  }, [fetchProfile]);
 
-  async function signOut() {
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     if (hasDedicatedTimeSupabase) {
       await timeSupabase.auth.signOut();
     }
     setProfile(null);
     setTimeAuthError(null);
-  }
+  }, []);
+
+  const contextValue = useMemo(() => ({
+    session,
+    timeSession,
+    profile,
+    loading,
+    timeLoading,
+    timeAuthError,
+    hasDedicatedTimeSupabase,
+    signIn,
+    signUp,
+    signOut,
+    refreshProfile,
+  }), [
+    session,
+    timeSession,
+    profile,
+    loading,
+    timeLoading,
+    timeAuthError,
+    signIn,
+    signUp,
+    signOut,
+    refreshProfile,
+  ]);
 
   return (
-    <AuthContext.Provider
-      value={{
-        session,
-        timeSession,
-        profile,
-        loading,
-        timeLoading,
-        timeAuthError,
-        hasDedicatedTimeSupabase,
-        signIn,
-        signUp,
-        signOut,
-        refreshProfile,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

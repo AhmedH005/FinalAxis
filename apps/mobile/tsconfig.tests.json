@@ -11,18 +11,30 @@
     "baseUrl": "."
   },
   "include": [
+    "src/engines/capture/**/*.ts",
     "src/engines/body/recovery-score.ts",
     "src/engines/body/summary.ts",
     "src/engines/body/types.ts",
     "src/engines/life-os/context.ts",
+    "src/engines/life-os/day-reshaping/**/*.ts",
+    "src/engines/life-os/goal-alignment/**/*.ts",
+    "src/engines/life-os/history/**/*.ts",
     "src/engines/life-os/observations.ts",
     "src/engines/life-os/types.ts",
+    "src/engines/life-os/weekly/**/*.ts",
     "src/engines/mind/patterns.ts",
     "src/engines/mind/types.ts",
     "src/engines/mind/utils.ts",
+    "src/engines/time/reshaping/**/*.ts",
+    "src/features/day-reshaping/model.ts",
+    "src/features/goal-alignment/detail-model.ts",
+    "src/features/today/life-os-model.ts",
     "src/engines/time/summary.ts",
     "src/engines/time/types.ts",
-    "src/lib/supabase/database.types.ts"
+    "src/lib/supabase/client.ts",
+    "src/lib/supabase/database.types.ts",
+    "src/lib/supabase/timeClient.ts",
+    "src/types/navigation.ts"
   ],
   "exclude": [
     "node_modules"

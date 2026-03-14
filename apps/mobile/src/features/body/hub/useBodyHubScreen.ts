@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { appRoutes } from '@/types/navigation';
@@ -66,12 +66,20 @@ export function useBodyHubScreen() {
     sleepTargetMinutes: sleepTarget,
   }), [recoveryEntry?.energy, recoveryEntry?.fatigue, recoveryEntry?.soreness, sleepMinutes, sleepTarget]);
 
-  const focus = buildBodyFocusSummary({
+  const focus = useMemo(() => buildBodyFocusSummary({
     hydrationRemainingMl: hydrationRemaining,
     calories,
     sleepMinutes,
     recoveryScore,
-  });
+  }), [calories, hydrationRemaining, recoveryScore, sleepMinutes]);
+
+  const openFocus = useCallback(() => router.push(routeForTarget(focus.target)), [router, focus.target]);
+  const openNutrition = useCallback(() => router.push(appRoutes.bodyNutrition), [router]);
+  const openHydration = useCallback(() => router.push(appRoutes.bodyHydration), [router]);
+  const openSleep = useCallback(() => router.push(appRoutes.bodySleep), [router]);
+  const openRecovery = useCallback(() => router.push(appRoutes.bodyRecovery), [router]);
+  const openWorkouts = useCallback(() => router.push(appRoutes.bodyWorkouts), [router]);
+  const openMetrics = useCallback(() => router.push(appRoutes.bodyMetrics), [router]);
 
   return {
     units,
@@ -89,13 +97,13 @@ export function useBodyHubScreen() {
     recoveryScore,
     workouts,
     focus,
-    openFocus: () => router.push(routeForTarget(focus.target)),
-    openNutrition: () => router.push(appRoutes.bodyNutrition),
-    openHydration: () => router.push(appRoutes.bodyHydration),
-    openSleep: () => router.push(appRoutes.bodySleep),
-    openRecovery: () => router.push(appRoutes.bodyRecovery),
-    openWorkouts: () => router.push(appRoutes.bodyWorkouts),
-    openMetrics: () => router.push(appRoutes.bodyMetrics),
+    openFocus,
+    openNutrition,
+    openHydration,
+    openSleep,
+    openRecovery,
+    openWorkouts,
+    openMetrics,
     formatHydration,
     formatDuration,
   };

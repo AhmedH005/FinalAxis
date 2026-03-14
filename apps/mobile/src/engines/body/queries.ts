@@ -59,12 +59,16 @@ export function useTodayHydrationLogs() {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
 export function useTodayHydrationTotal() {
   const { data: logs, ...rest } = useTodayHydrationLogs();
-  const total_ml = logs?.reduce((sum, l) => sum + l.amount_ml, 0) ?? 0;
+  const total_ml = useMemo(
+    () => logs?.reduce((sum, l) => sum + l.amount_ml, 0) ?? 0,
+    [logs],
+  );
   return { total_ml, logs, ...rest };
 }
 
@@ -91,9 +95,7 @@ export function useRecentSleepLogs(limit = 10) {
       const normalizedHealth = healthRecords.map((record) => normalizeAppleHealthSleepRecord(record));
       return mergeAxisSleepRecords([...normalizedHealth, ...normalizedManual], limit);
     },
-    staleTime: 0,
-    refetchOnMount: 'always',
-    refetchInterval: 60 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
 
   const data = useMemo(
@@ -125,6 +127,7 @@ export function useWeightHistory(days = 30) {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -142,6 +145,7 @@ export function useLatestWeight() {
       if (error) throw error;
       return data;
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -161,6 +165,7 @@ export function useTodayWorkouts() {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -176,6 +181,7 @@ export function useRecentWorkouts(limit = 20) {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -214,6 +220,7 @@ export function useWorkoutLog(workoutId: string | null | undefined) {
       if (error) throw error;
       return data;
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -240,9 +247,7 @@ export function useTodayRecoveryCheckIn() {
       ]);
       return mergeRecoveryEntry(storedEntry, healthSnapshot);
     },
-    staleTime: 0,
-    refetchOnMount: 'always',
-    refetchInterval: 60 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -258,18 +263,19 @@ export function useRecentNutritionLogs(limit = 12) {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
 export function useTodayNutritionSummary() {
   const { data: logs, ...rest } = useTodayNutritionLogs();
-  const summary = {
+  const summary = useMemo(() => ({
     total_calories: logs?.reduce((s, l) => s + (l.total_calories ?? 0), 0) ?? 0,
     total_protein_g: logs?.reduce((s, l) => s + (l.total_protein_g ?? 0), 0) ?? 0,
     total_carbs_g: logs?.reduce((s, l) => s + (l.total_carbs_g ?? 0), 0) ?? 0,
     total_fat_g: logs?.reduce((s, l) => s + (l.total_fat_g ?? 0), 0) ?? 0,
     meal_count: logs?.length ?? 0,
-  };
+  }), [logs]);
   return { summary, logs, ...rest };
 }
 
@@ -281,14 +287,14 @@ export function useDailyEnergySummary() {
   const { data: latestWeight, isLoading: weightLoading } = useLatestWeight();
   const { data: recoveryEntry, isLoading: recoveryLoading } = useTodayRecoveryCheckIn();
 
-  const summary = buildDailyEnergySummary({
+  const summary = useMemo(() => buildDailyEnergySummary({
     date,
     profile,
     bodyWeightKg: latestWeight?.value ?? null,
     intakeCalories: nutrition.total_calories,
     steps: recoveryEntry?.steps ?? null,
     workouts,
-  });
+  }), [date, latestWeight?.value, nutrition.total_calories, profile, recoveryEntry?.steps, workouts]);
 
   return {
     summary,
@@ -314,6 +320,7 @@ export function useWeeklyNutrition(days = 7) {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -330,6 +337,7 @@ export function useWeeklyHydration(days = 7) {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -346,5 +354,6 @@ export function useWeeklySleep(days = 7) {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 }

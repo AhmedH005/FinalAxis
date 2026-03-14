@@ -1,8 +1,9 @@
+import { memo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { color, space, radius, typography } from '@axis/theme';
 
-export function TrackerCard({
+export const TrackerCard = memo(function TrackerCard({
   icon,
   iconColor,
   title,
@@ -34,7 +35,7 @@ export function TrackerCard({
       ) : null}
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

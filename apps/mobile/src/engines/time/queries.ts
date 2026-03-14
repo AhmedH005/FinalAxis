@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { addDays, endOfDay, startOfDay, startOfWeek } from 'date-fns';
+import { useMemo } from 'react';
 import { listTimeBlocks, type TimeSourceUsers } from './api';
 
 export function useTimeBlocksRange(users: TimeSourceUsers, start: Date, end: Date) {
@@ -19,15 +20,19 @@ export function useTimeBlocksRange(users: TimeSourceUsers, start: Date, end: Dat
 }
 
 export function useTimeCompanionWindow(users: TimeSourceUsers) {
-  const start = startOfWeek(new Date(), { weekStartsOn: 1 });
-  const end = endOfDay(addDays(new Date(), 14));
+  const { start, end } = useMemo(() => ({
+    start: startOfWeek(new Date(), { weekStartsOn: 1 }),
+    end: endOfDay(addDays(new Date(), 14)),
+  }), []);
 
   return useTimeBlocksRange(users, start, end);
 }
 
 export function useTimeBlockDetail(users: TimeSourceUsers, blockId: string | null | undefined) {
-  const start = startOfDay(addDays(new Date(), -30));
-  const end = endOfDay(addDays(new Date(), 45));
+  const { start, end } = useMemo(() => ({
+    start: startOfDay(addDays(new Date(), -30)),
+    end: endOfDay(addDays(new Date(), 45)),
+  }), []);
 
   return useQuery({
     queryKey: ['time', 'block', users.primaryUserId ?? null, users.timeUserId ?? null, blockId],
